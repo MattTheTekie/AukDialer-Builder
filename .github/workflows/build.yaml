@@ -16,13 +16,13 @@ concurrency:
 env:
   UPSTREAM_REPOSITORY: Victor-root/AukDialer
 
-  # Adjust these if the project's Gradle configuration requires it.
+  # Adjust these if required by the project's Gradle configuration.
   JAVA_VERSION: "17"
   BUILD_TASK: assembleDebug
 
 jobs:
   sync-build-release:
-    # Prevent accidentally running this automation in the upstream repository.
+    # Run only in a fork, not in the upstream repository.
     if: github.repository != 'Victor-root/AukDialer'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -44,7 +44,8 @@ jobs:
           set -euo pipefail
 
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
           UPSTREAM_BRANCH="$(
             gh api "repos/${UPSTREAM_REPOSITORY}" --jq '.default_branch'
@@ -85,7 +86,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Manual runs always rebuild. Scheduled runs skip existing releases.
+          # Manual runs always build.
+          # Scheduled runs skip upstream commits already released.
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             echo "build=true" >> "${GITHUB_OUTPUT}"
           elif gh release view "${TAG}" \
@@ -105,6 +107,9 @@ jobs:
       - name: Set up Android SDK
         if: steps.decide.outputs.build == 'true'
         uses: android-actions/setup-android@v3
+        with:
+          # Do not request the removed legacy "tools" package.
+          packages: 'platform-tools'
 
       - name: Set up Gradle
         if: steps.decide.outputs.build == 'true'
@@ -123,6 +128,8 @@ jobs:
           if [[ -n "${DEBUG_KEYSTORE_BASE64}" ]]; then
             printf '%s' "${DEBUG_KEYSTORE_BASE64}" \
               | base64 --decode > "${HOME}/.android/debug.keystore"
+
+            chmod 600 "${HOME}/.android/debug.keystore"
           else
             echo "::warning::No persistent debug keystore configured. APKs from different runs may not update over each other."
           fi
@@ -133,10 +140,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          test -f gradlew || {
+          if [[ ! -f gradlew ]]; then
             echo "::error::No Gradle wrapper found at the repository root."
             exit 1
-          }
+          fi
 
           chmod +x gradlew
           ./gradlew --no-daemon "${BUILD_TASK}"
@@ -150,9 +157,10 @@ jobs:
           mkdir -p release-assets
 
           while IFS= read -r -d '' APK; do
-            # Preserve module/variant information and avoid filename collisions.
+            # Include module and variant paths to avoid duplicate names.
             NAME="${APK#./}"
             NAME="${NAME//\//-}"
+
             cp "${APK}" "release-assets/${NAME}"
           done < <(
             find . -type f \
