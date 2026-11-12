@@ -3,8 +3,8 @@ name: Sync upstream, build APK, and release
 on:
   workflow_dispatch:
   schedule:
-    # Every day at 03:20 UTC.
-    - cron: "20 3 * * *"
+    # Every day at 00:00 UTC.
+    - cron: "00 0 * * *"
 
 permissions:
   contents: write
