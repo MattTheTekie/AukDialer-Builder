@@ -1,8 +1,8 @@
 package auk.dialer.vroot.view.components
 
 import auk.dialer.vroot.view.theme.softAccentColors
+import auk.dialer.vroot.view.theme.animateCornerDpAsState
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -47,6 +48,7 @@ import auk.dialer.vroot.controller.util.PreferenceManager
 import auk.dialer.vroot.view.theme.LocalAccentBarColor
 import auk.dialer.vroot.view.theme.LocalOnAccentBarColor
 import auk.dialer.vroot.view.theme.LocalCardRoundness
+import auk.dialer.vroot.view.theme.LocalVividColors
 import auk.dialer.vroot.view.theme.AukMaterialShapes
 import auk.dialer.vroot.view.theme.AukMotion
 import auk.dialer.vroot.view.theme.AukShapeDefaults
@@ -383,7 +385,7 @@ fun AukExpressiveButton(
 
     val restCorner = aukCornerDp((size.value * 0.45f).roundToInt(), roundness)
     val pressedCorner = aukCornerDp((size.value * 0.26f).roundToInt(), roundness)
-    val cornerRadius by animateDpAsState(
+    val cornerRadius by animateCornerDpAsState(
         targetValue = if (isPressed) pressedCorner else restCorner,
         animationSpec = AukMotion.pressFeedback(),
         label = "AukExpressiveButtonCorner"
@@ -437,7 +439,8 @@ fun AukExpressiveButton(
                 style = MaterialTheme.typography.labelMediumEmphasized,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
+                // A row of four buttons leaves too little width for some labels on one line.
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -530,7 +533,7 @@ fun AukListItem(
     val roundness = LocalCardRoundness.current
     val restCorner = aukCornerDp(24, roundness)
     val pressedCorner = aukCornerDp(12, roundness)
-    val animatedCornerRadius by animateDpAsState(
+    val animatedCornerRadius by animateCornerDpAsState(
         targetValue = if (isPressed) pressedCorner else restCorner,
         animationSpec = AukMotion.shapeMorph(),
         label = "AukListItemCorner"
@@ -705,7 +708,7 @@ fun AukSelectListItem(
     enabled: Boolean = true,
     preview: (@Composable (Int) -> Unit)? = null
 ) {
-    var showSelectionScreen by remember { mutableStateOf(false) }
+    var showSelectionScreen by rememberSaveable { mutableStateOf(false) }
 
     AukListItem(
         headline = headline,
@@ -861,7 +864,8 @@ fun AukColorSwatch(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     size: Dp = AukColorSwatchDefaults.Size,
-    icon: ImageVector? = null
+    icon: ImageVector? = null,
+    name: String? = null
 ) {
     val progress by animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
@@ -899,11 +903,13 @@ fun AukColorSwatch(
         }
     }
 
+    // A plain colour says nothing to TalkBack without its name.
+    val namedModifier = if (name != null) modifier.semantics { contentDescription = name } else modifier
     if (onClick != null) {
         Surface(
             selected = selected,
             onClick = onClick,
-            modifier = modifier.size(size),
+            modifier = namedModifier.size(size),
             shape = shape,
             color = color,
             contentColor = onColor,
@@ -912,7 +918,7 @@ fun AukColorSwatch(
         )
     } else {
         Surface(
-            modifier = modifier.size(size),
+            modifier = namedModifier.size(size),
             shape = shape,
             color = color,
             contentColor = onColor,
@@ -920,6 +926,21 @@ fun AukColorSwatch(
             content = content
         )
     }
+}
+
+/**
+ * Slider colours for the app. Vivid colours fill the pale containers a slider takes its remaining
+ * track from with the accent, which would paint both sides of the thumb alike and hide the value: that
+ * side turns neutral instead.
+ */
+@Composable
+fun aukSliderColors(): SliderColors = if (LocalVividColors.current) {
+    SliderDefaults.colors(
+        inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        inactiveTickColor = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+} else {
+    SliderDefaults.colors()
 }
 
 object AukColorSwatchDefaults {
@@ -939,13 +960,14 @@ fun AukColorSelectListItem(
     selectedColor: Color?,
     onColorSelected: (Color) -> Unit,
     modifier: Modifier = Modifier,
+    colorNames: List<String> = emptyList(),
     supporting: String? = null,
     leadingIcon: ImageVector? = null,
     enabled: Boolean = true,
     contentBeforeGrid: (@Composable ColumnScope.(onSelect: () -> Unit) -> Unit)? = null,
     contentAfterGrid: (@Composable ColumnScope.() -> Unit)? = null
 ) {
-    var showPicker by remember { mutableStateOf(false) }
+    var showPicker by rememberSaveable { mutableStateOf(false) }
 
     AukListItem(
         headline = headline,
@@ -976,6 +998,7 @@ fun AukColorSelectListItem(
             title = headline,
             icon = leadingIcon,
             colors = colors,
+            colorNames = colorNames,
             selectedColor = selectedColor,
             onColorSelected = {
                 showPicker = false

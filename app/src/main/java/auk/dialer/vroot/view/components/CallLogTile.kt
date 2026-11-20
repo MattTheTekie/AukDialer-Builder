@@ -44,6 +44,7 @@ fun CallLogTileSimple(
         CallLog.Calls.INCOMING_TYPE -> Icons.AutoMirrored.Filled.CallReceived
         CallLog.Calls.OUTGOING_TYPE -> Icons.AutoMirrored.Filled.CallMade
         CallLog.Calls.MISSED_TYPE, CallLog.Calls.REJECTED_TYPE -> Icons.AutoMirrored.Filled.CallMissed
+        CallLog.Calls.BLOCKED_TYPE -> Icons.Default.Block
         else -> Icons.Default.Call
     }
 
@@ -69,6 +70,7 @@ fun CallLogTileSimple(
                         CallLog.Calls.OUTGOING_TYPE -> stringResource(R.string.call_type_outgoing)
                         CallLog.Calls.MISSED_TYPE -> stringResource(R.string.call_type_missed)
                         CallLog.Calls.REJECTED_TYPE -> stringResource(R.string.call_type_declined)
+                        CallLog.Calls.BLOCKED_TYPE -> stringResource(R.string.call_type_blocked)
                         else -> stringResource(R.string.action_call)
                     },
                     supporting = buildString {
@@ -114,6 +116,7 @@ class CallLogTileIcons(
     val missed: Painter,
     val received: Painter,
     val made: Painter,
+    val blocked: Painter,
     val other: Painter,
     val call: Painter
 )
@@ -123,9 +126,12 @@ fun rememberCallLogTileIcons(): CallLogTileIcons {
     val missed = rememberVectorPainter(Icons.AutoMirrored.Filled.CallMissed)
     val received = rememberVectorPainter(Icons.AutoMirrored.Filled.CallReceived)
     val made = rememberVectorPainter(Icons.AutoMirrored.Filled.CallMade)
+    val blocked = rememberVectorPainter(Icons.Default.Block)
     val other = rememberVectorPainter(Icons.Default.Call)
     val call = rememberVectorPainter(Icons.Rounded.Call)
-    return remember(missed, received, made, other, call) { CallLogTileIcons(missed, received, made, other, call) }
+    return remember(missed, received, made, blocked, other, call) {
+        CallLogTileIcons(missed, received, made, blocked, other, call)
+    }
 }
 
 @Composable
@@ -143,6 +149,7 @@ fun CallLogTile(
         CallLog.Calls.MISSED_TYPE, CallLog.Calls.REJECTED_TYPE -> icons.missed
         CallLog.Calls.INCOMING_TYPE -> icons.received
         CallLog.Calls.OUTGOING_TYPE -> icons.made
+        CallLog.Calls.BLOCKED_TYPE -> icons.blocked
         else -> icons.other
     }
     
@@ -239,7 +246,9 @@ fun BatchCallLogActionBar(
     onDelete: () -> Unit,
     onBlock: () -> Unit,
     onAddContact: (() -> Unit)? = null,
-    onCopy: (() -> Unit)? = null
+    onCopy: (() -> Unit)? = null,
+    // A selected row can stand for several calls in a row: the confirmation counts the calls.
+    deleteCount: Int = selectedCount
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showBlockConfirm by remember { mutableStateOf(false) }
@@ -268,7 +277,7 @@ fun BatchCallLogActionBar(
             onDismissRequest = { showDeleteConfirm = false },
             onConfirm = onDelete,
             title = stringResource(R.string.call_log_delete_title),
-            message = pluralStringResource(R.plurals.call_log_delete_confirm, selectedCount, selectedCount),
+            message = pluralStringResource(R.plurals.call_log_delete_confirm, deleteCount, deleteCount),
             confirmLabel = stringResource(R.string.action_delete),
             dismissLabel = stringResource(R.string.action_cancel),
             icon = Icons.Default.Delete,

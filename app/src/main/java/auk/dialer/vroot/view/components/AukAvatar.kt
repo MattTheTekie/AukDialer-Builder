@@ -1,5 +1,8 @@
 package auk.dialer.vroot.view.components
 
+import auk.dialer.vroot.view.theme.AUK_AVATAR_SHAPE_HEART
+import kotlin.math.roundToInt
+import androidx.compose.ui.layout.layout
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -29,7 +32,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.RadialGradientShader
+import androidx.compose.ui.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.painter.Painter
@@ -219,20 +226,18 @@ fun aukAvatarColors(name: String, colorful: Boolean = true, vivid: Boolean = auk
 private fun gradientAvatarBrush(name: String, dark: Boolean): Brush {
     val baseHue = aukAvatarHueIndex(name) * (360f / AukAvatarDefaults.HueCount)
     val accentHue = (baseHue + 180f) % 360f
-
-    return if (dark) {
-        Brush.radialGradient(
-            0.0f to hslColor(baseHue, 0.75f, 0.45f),
-            1.0f to hslColor(accentHue, 0.60f, 0.22f),
-            center = Offset(0.25f, 0.15f),
-            radius = 1.3f
-        )
+    val colors = if (dark) {
+        listOf(hslColor(baseHue, 0.75f, 0.45f), hslColor(accentHue, 0.60f, 0.22f))
     } else {
-        Brush.radialGradient(
-            0.0f to hslColor(baseHue, 0.80f, 0.85f),
-            1.0f to hslColor(accentHue, 0.65f, 0.55f),
-            center = Offset(0.25f, 0.15f),
-            radius = 1.3f
+        listOf(hslColor(baseHue, 0.80f, 0.85f), hslColor(accentHue, 0.65f, 0.55f))
+    }
+    // Placed from the avatar's own size: Brush.radialGradient takes its center and radius in pixels,
+    // so fractions there drew a gradient a pixel wide and left the avatar in the end colour.
+    return object : ShaderBrush() {
+        override fun createShader(size: Size): Shader = RadialGradientShader(
+            center = Offset(size.width * 0.25f, size.height * 0.15f),
+            radius = size.minDimension * 1.3f,
+            colors = colors
         )
     }
 }
@@ -322,6 +327,20 @@ fun AukAvatar(
             }
         )
 
+    // A heart's notch takes the top of the shape: its body, where the letter or icon has room, sits
+    // lower than the box's middle.
+    val showsPhoto = style.showPicture && !photoUri.isNullOrEmpty() && photoUri != "voicemail://icon"
+    val contentModifier = if (!showsPhoto && avatarShape == style.shape && style.shapeIndex == AUK_AVATAR_SHAPE_HEART) {
+        Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            layout(placeable.width, placeable.height) {
+                placeable.place(0, (placeable.height * HEART_CONTENT_DROP).roundToInt())
+            }
+        }
+    } else {
+        Modifier
+    }
+
     val backgroundModifier = if (gradientBrush != null) {
         Modifier.background(gradientBrush, avatarShape)
     } else {
@@ -333,10 +352,11 @@ fun AukAvatar(
             modifier = Modifier
                 .fillMaxSize()
                 .then(backgroundModifier)
-                .clip(avatarShape),
+                .clip(avatarShape)
+                .then(contentModifier),
             contentAlignment = Alignment.Center
         ) {
-            if (style.showPicture && !photoUri.isNullOrEmpty() && photoUri != "voicemail://icon") {
+            if (showsPhoto) {
                 AsyncImage(
                     model = photoUri,
                     contentDescription = null,
@@ -394,3 +414,5 @@ fun AukAvatar(
         }
     }
 }
+
+private const val HEART_CONTENT_DROP = 0.07f

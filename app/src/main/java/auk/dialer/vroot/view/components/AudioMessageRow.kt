@@ -170,7 +170,7 @@ fun AudioMessageRow(
             }
         }
 
-        if (isCurrent && durationMs > 0) {
+        if (isCurrent && durationMs > 0 && !selectionMode) {
             // While dragging, follow the finger rather than the player: the
             // player only reports the new position once the seek lands, which
             // otherwise makes the handle snap back under the finger.
@@ -196,7 +196,8 @@ fun AudioMessageRow(
                     valueRange = 0f..durationMs.toFloat(),
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 8.dp)
+                        .padding(horizontal = 8.dp),
+                    colors = aukSliderColors()
                 )
                 Text(
                     text = formatPlaybackTime(durationMs),

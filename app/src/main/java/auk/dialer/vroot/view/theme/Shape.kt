@@ -1,5 +1,7 @@
 package auk.dialer.vroot.view.theme
 
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,9 +12,14 @@ import androidx.compose.material3.toPath
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.toRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Outline
@@ -48,6 +55,21 @@ fun aukRoundnessScale(roundness: Int): Float =
 
 fun aukCornerDp(baseDp: Int, roundness: Int): Dp =
     (baseDp * aukRoundnessScale(roundness)).coerceAtLeast(1f).dp
+
+/**
+ * A corner radius animated with a spring. The spatial springs overshoot their target, and with the
+ * lowest card roundness the target is close enough to zero for that overshoot to go below it, which
+ * a shape rejects with a crash. So the value handed out never goes under zero.
+ */
+@Composable
+fun animateCornerDpAsState(
+    targetValue: Dp,
+    animationSpec: FiniteAnimationSpec<Dp>,
+    label: String
+): State<Dp> {
+    val animated = animateDpAsState(targetValue, animationSpec, label = label)
+    return remember(animated) { derivedStateOf { animated.value.coerceAtLeast(0.dp) } }
+}
 
 fun aukCornerShape(baseDp: Int, roundness: Int): CornerBasedShape =
     RoundedCornerShape(aukCornerDp(baseDp, roundness))
@@ -135,7 +157,12 @@ const val AUK_AVATAR_SHAPE_BURST: Int = 10
 
 @Composable
 fun aukAvatarShape(shapeIndex: Int): Shape = when (shapeIndex) {
-    AUK_AVATAR_SHAPE_SQUIRCLE -> MaterialTheme.shapes.large
+    AUK_AVATAR_SHAPE_SQUIRCLE -> {
+        val roundness = LocalCardRoundness.current
+        remember(roundness) {
+            CappedRoundedCornerShape(aukCornerDp(AukShapeDefaults.BaseLarge, roundness), SQUIRCLE_MAX_CORNER_SHARE)
+        }
+    }
     AUK_AVATAR_SHAPE_CIRCLE -> CircleShape
     AUK_AVATAR_SHAPE_SQUARE -> RoundedCornerShape(8.dp)
     AUK_AVATAR_SHAPE_COOKIE -> MaterialShapes.Cookie9Sided.toShape()
@@ -148,6 +175,19 @@ fun aukAvatarShape(shapeIndex: Int): Shape = when (shapeIndex) {
     AUK_AVATAR_SHAPE_BURST -> MaterialShapes.SoftBurst.toShape()
     else -> CircleShape
 }
+
+/**
+ * Corners of [radius], but never rounder than [maxShare] of the smaller side. A fixed radius that suits
+ * a large avatar takes nearly half a small one, which then reads as a circle.
+ */
+private data class CappedRoundedCornerShape(private val radius: Dp, private val maxShare: Float) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val corner = minOf(with(density) { radius.toPx() }, size.minDimension * maxShare)
+        return Outline.Rounded(RoundRect(size.toRect(), CornerRadius(corner)))
+    }
+}
+
+private const val SQUIRCLE_MAX_CORNER_SHARE = 0.3f
 
 @Composable
 fun aukPolygonShape(polygon: RoundedPolygon): Shape = polygon.toShape()

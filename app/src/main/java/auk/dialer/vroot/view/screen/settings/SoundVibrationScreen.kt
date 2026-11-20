@@ -1,5 +1,6 @@
 package auk.dialer.vroot.view.screen.settings
 
+import auk.dialer.vroot.view.components.aukSliderColors
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.automirrored.outlined.PhoneMissed
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -52,7 +54,7 @@ fun SoundVibrationScreen(
     val settingsState by prefs.settingsChanged.collectAsState()
 
     var hapticListScroll by remember(settingsState) { mutableStateOf(prefs.getBoolean(PreferenceManager.KEY_HAPTIC_LIST_SCROLL, false)) }
-    var showIntensityDialog by remember { mutableStateOf(false) }
+    var showIntensityDialog by rememberSaveable { mutableStateOf(false) }
     var missedCallNotifications by remember(settingsState) { mutableStateOf(prefs.getBoolean(PreferenceManager.KEY_MISSED_CALL_NOTIFICATIONS, true)) }
 
     Scaffold(
@@ -257,7 +259,8 @@ private fun IntensitySlider(
             valueRange = IntensityRange,
             steps = IntensitySteps,
             onValueChangeFinished = onValueChangeFinished,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = aukSliderColors()
         )
     }
 }

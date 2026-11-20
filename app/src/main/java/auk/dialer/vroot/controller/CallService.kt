@@ -79,7 +79,6 @@ class CallService : InCallService() {
         // fixed once created, hence a new id for the old one that played the notification sound.
         private const val CHANNEL_ID = "call_channel_silent"
         private const val LEGACY_CHANNEL_ID = "call_channel"
-        private const val BLOCKED_CHANNEL_ID = "blocked_call_channel"
         private const val NOTIFICATION_PHOTO_SIZE = 256
         private const val MISSED_CHANNEL_ID = "missed_call_channel"
         private const val NOTIFICATION_ID = 101
@@ -385,43 +384,13 @@ class CallService : InCallService() {
         }
     }
 
+    // Android's block list stops a blocked call before it gets here; one that still arrives is
+    // turned down the same way, and told about like those.
     private fun handleBlockedCall(call: Call, number: String) {
-        val method = preferenceManager.getInt(PreferenceManager.KEY_BLOCK_METHOD, 0)
-
-        if (method == 0) {
-            call.reject(Call.REJECT_REASON_DECLINED)
-        } else {
-            // Left to ring out unanswered, without the ringtone Telecom would otherwise play.
-            try {
-                (getSystemService(Context.TELECOM_SERVICE) as TelecomManager).silenceRinger()
-            } catch (e: SecurityException) {
-                if (BuildConfig.DEBUG_TOOLS) Log.d(DEBUG_TAG, "silenceRinger refused", e)
-            }
-        }
-
+        call.reject(Call.REJECT_REASON_DECLINED)
         if (preferenceManager.getBoolean(PreferenceManager.KEY_BLOCK_NOTIFICATION, true)) {
-            showBlockedNotification(number)
+            BlockedCallNotifier.notify(this, number)
         }
-    }
-
-    private fun showBlockedNotification(number: String) {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(
-            NotificationChannel(
-                BLOCKED_CHANNEL_ID,
-                getString(R.string.notif_channel_blocked_calls),
-                NotificationManager.IMPORTANCE_LOW
-            )
-        )
-
-        val builder = NotificationCompat.Builder(this, BLOCKED_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_close_clear_cancel)
-            .setContentTitle(getString(R.string.notif_blocked_call_title))
-            .setContentText(getString(R.string.notif_blocked_call_text, formatPhoneNumber(number)))
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setAutoCancel(true)
-
-        notificationManager.notify(number.hashCode(), builder.build())
     }
 
     private fun showMissedCallNotification(call: Call) {
@@ -488,7 +457,24 @@ class CallService : InCallService() {
             .setAutoCancel(true)
             .setColor(Color.RED)
 
-        notificationManager.notify(number.hashCode(), builder.build())
+        // Call back or answer by text right from the notification, which then goes away.
+        val notificationId = number.hashCode()
+        if (number.isNotEmpty()) {
+            fun action(intentAction: String, requestOffset: Int): PendingIntent = PendingIntent.getActivity(
+                this,
+                notificationId * 31 + requestOffset,
+                Intent(this, auk.dialer.vroot.MainActivity::class.java)
+                    .setAction(intentAction)
+                    .setData(Uri.fromParts("tel", number, null))
+                    .putExtra(auk.dialer.vroot.MainActivity.EXTRA_DISMISS_NOTIFICATION, notificationId)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(0, getString(R.string.notif_action_call_back), action(Intent.ACTION_CALL, 1))
+            builder.addAction(0, getString(R.string.action_message), action(auk.dialer.vroot.MainActivity.ACTION_MESSAGE_CALLER, 2))
+        }
+
+        notificationManager.notify(notificationId, builder.build())
     }
 
     private fun updateCallState() {

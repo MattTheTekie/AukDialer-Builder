@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import auk.dialer.vroot.view.components.rememberCurrentDay
 import auk.dialer.vroot.R
 import auk.dialer.vroot.view.components.AukTopBarTitle
 import auk.dialer.vroot.controller.CallLogViewModel
@@ -60,7 +61,10 @@ fun CallLogFullScreen(
 
     val allLogs by viewModel.allCalls.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val selectedFilter by viewModel.selectedFilter.collectAsState()
+    // One person's history: a filter for calls with contacts has nothing to sort out, so it is left
+    // out, and the Recents filter it shares stands for all calls here.
+    val sharedFilter by viewModel.selectedFilter.collectAsState()
+    val selectedFilter = if (sharedFilter == CallLogFilter.Contacts) CallLogFilter.All else sharedFilter
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -122,6 +126,7 @@ fun CallLogFullScreen(
                 } else {
                     BatchCallLogActionBar(
                         selectedCount = selectedEntries.size,
+                        deleteCount = selectedEntries.sumOf { it.ids.size },
                         onClearSelection = { selectedEntries = emptySet() },
                         onDelete = {
                             val allIdsToDelete = selectedEntries.flatMap { it.ids }
@@ -152,7 +157,7 @@ fun CallLogFullScreen(
         Box(modifier = Modifier.padding(innerPadding.aukExceptBottom()).fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 AukAccentFilterBar {
-                    items(CallLogFilter.entries) { filter ->
+                    items(CallLogFilter.entries - CallLogFilter.Contacts) { filter ->
                         AukFilterChip(filter.displayLabel(), selectedFilter == filter, {
                             _ ->
                             viewModel.setFilter(filter)
@@ -179,11 +184,10 @@ fun CallLogFullScreen(
                     }
                 } else {
                     val finalLogs = when (selectedFilter) {
-                        CallLogFilter.All -> filteredLogsByContact
+                        CallLogFilter.All, CallLogFilter.Contacts -> filteredLogsByContact
                         CallLogFilter.Missed -> filteredLogsByContact.filter { it.type == CallLog.Calls.MISSED_TYPE }
                         CallLogFilter.Incoming -> filteredLogsByContact.filter { it.type == CallLog.Calls.INCOMING_TYPE }
                         CallLogFilter.Outgoing -> filteredLogsByContact.filter { it.type == CallLog.Calls.OUTGOING_TYPE }
-                        CallLogFilter.Contacts -> filteredLogsByContact.filter { it.contactId != null }
                     }
 
                     if (finalLogs.isEmpty()) {
@@ -191,7 +195,8 @@ fun CallLogFullScreen(
                             Text(stringResource(R.string.call_log_no_filter_match), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     } else {
-                        val groupedLogs = finalLogs.groupBy { formatDateHeader(context, it.date) }
+                        val today = rememberCurrentDay()
+                        val groupedLogs = remember(finalLogs, today) { finalLogs.groupBy { formatDateHeader(context, it.date) } }
 
                         LazyColumn(
                             state = listState,

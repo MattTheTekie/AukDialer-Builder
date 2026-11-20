@@ -26,6 +26,7 @@ import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
+import auk.dialer.vroot.view.components.rememberCurrentDay
 import auk.dialer.vroot.R
 import auk.dialer.vroot.controller.util.matchesSearch
 import auk.dialer.vroot.controller.CallLogViewModel
@@ -117,6 +118,7 @@ fun RecentScreenContent(
     val batchActionBar: @Composable () -> Unit = {
         BatchCallLogActionBar(
             selectedCount = selectedEntries.size,
+            deleteCount = selectedEntries.sumOf { it.ids.size },
             onClearSelection = { selectedEntries = emptySet() },
             onDelete = {
                 val allIdsToDelete = selectedEntries.flatMap { it.ids }
@@ -205,7 +207,7 @@ fun RecentScreenContent(
             }
         },
         floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(ScrollToTopFabGap)) {
                 ScrollToTopButton(
                     visible = showButton && selectedEntries.isEmpty(),
                     onClick = {
@@ -424,13 +426,11 @@ fun CallLogFullContent(
         val favRowState = rememberLazyListState()
         val favItems = remember { mutableStateListOf<Contact>() }
         LaunchedEffect(favorites) {
-            if (favItems.map { it.id }.toSet() != favorites.map { it.id }.toSet()) {
-                favItems.clear()
-                favItems.addAll(favorites)
-            } else {
-                val byId = favorites.associateBy { it.id }
-                for (i in favItems.indices) byId[favItems[i].id]?.let { favItems[i] = it }
-            }
+            val atStart = favRowState.firstVisibleItemIndex == 0 && favRowState.firstVisibleItemScrollOffset == 0
+            favItems.syncWith(favorites)
+            // A lazy row keeps the item it showed first in place when the order changes, which would
+            // leave a favourite moved to the front scrolled off to the left.
+            if (atStart) favRowState.scrollToItem(0)
         }
 
         val rowDragDropState = rememberRowDragDropState(favRowState) { from, to ->
@@ -449,6 +449,15 @@ fun CallLogFullContent(
         LaunchedEffect(selectedFilter, mergeFavorites, favorites.isEmpty()) {
             isEditingFavorites = false
         }
+        // Another filter is another list, read from its top: kept where the last one was scrolled to,
+        // its first calls would sit hidden above the screen.
+        var shownFilter by remember { mutableStateOf(selectedFilter) }
+        LaunchedEffect(selectedFilter) {
+            if (selectedFilter != shownFilter) {
+                shownFilter = selectedFilter
+                listState.scrollToItem(0)
+            }
+        }
         val context = LocalContext.current
         val callLauncher = rememberCallLauncher()
         val blockLogVisibility = prefs.getInt(auk.dialer.vroot.controller.util.PreferenceManager.KEY_BLOCK_LOG_VISIBILITY, 0)
@@ -466,7 +475,8 @@ fun CallLogFullContent(
             }.groupedConsecutive()
         }
 
-        val groupedLogs = remember(filteredLogs) {
+        val today = rememberCurrentDay()
+        val groupedLogs = remember(filteredLogs, today) {
             filteredLogs.groupBy { formatDateHeader(context, it.date) }
         }
 
